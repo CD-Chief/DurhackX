@@ -28,13 +28,6 @@ try:
     print("Moving to 90 degrees")
     set_angle(90)
     time.sleep(1)
-    
-    print("Moving to 180 degrees")
-    set_angle(180)
-    time.sleep(1)
-    
-    print("Back to 90 degrees")
-    set_angle(90)
 
     
 except KeyboardInterrupt:
