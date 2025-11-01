@@ -35,6 +35,9 @@ try:
     
     print("Back to 90 degrees")
     set_angle(90)
+
+    print("Back to 120 degrees")
+    set_angle(120)
     
 except KeyboardInterrupt:
     print("\nExiting...")
