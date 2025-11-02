@@ -2,7 +2,7 @@ import requests
 import json
 
 class PiCommunicator:
-    def __init__(self, pi_ip='192.168.1.100', pi_port=5001):
+    def __init__(self, pi_ip='10.232.170.146', pi_port=5000):
         self.pi_url = f"http://{pi_ip}:{pi_port}/orientation"
         self.pi_ip = pi_ip
         self.pi_port = pi_port

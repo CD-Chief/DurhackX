@@ -17,7 +17,7 @@ CORS(app)
 
 # Global state
 tracker = FaceTracker()
-communicator = PiCommunicator(pi_ip='192.168.1.100')
+communicator = PiCommunicator(pi_ip='10.232.170.146', pi_port=5000)
 cap = cv2.VideoCapture(0)
 
 current_state = {
