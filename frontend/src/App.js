@@ -32,7 +32,7 @@ function App() {
   useEffect(() => {
     const checkPi = setInterval(async () => {
       try {
-        const response = await fetch('http://192.168.1.100:5000/video_feed', { method: 'HEAD' });
+        const response = await fetch('http://10.232.170.146:5000/video_feed', { method: 'HEAD' });
         setPiConnected(response.ok);
       } catch (error) {
         setPiConnected(false);
@@ -46,7 +46,7 @@ function App() {
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch('http://192.168.1.100:5000/llm_summary');
+        const response = await fetch('http://10.232.170.146:5000/llm_summary');
         const data = await response.json();
         setAiInsights(data.summary || "Waiting for AI analysis...");
         setAiMessage(data.summary || "Waiting for AI analysis...");
@@ -74,7 +74,7 @@ function App() {
           <div className="main-video">
             {piConnected ? (
               <img 
-                src="http://192.168.1.100:5000/video_feed" 
+                src="http://10.232.170.146:5000/video_feed" 
                 alt="Pi Camera Feed"
                 className="video-feed"
               />
@@ -82,7 +82,7 @@ function App() {
               <div className="status-message">
                 <div className="status-icon">📡</div>
                 <p>Raspberry Pi Not Connected</p>
-                <small>Waiting for connection on 192.168.1.100:5000</small>
+                <small>Waiting for connection on 10.232.170.146:5000</small>
               </div>
             )}
             <div className="video-label">What Pi Sees</div>
