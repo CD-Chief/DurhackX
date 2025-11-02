@@ -10,10 +10,10 @@ class PiCommunicator:
         
         # Throttling and smoothing
         self.last_send_time = 0
-        self.send_interval = 0.1  # Send every 100ms (10 Hz max)
+        self.send_interval = 0.2  # Send every 200ms (5 Hz max) - REDUCED for smoother movement
         self.last_yaw = 0
         self.last_pitch = 0
-        self.smoothing_factor = 0.3  # Higher = more responsive, lower = smoother
+        self.smoothing_factor = 0.15  # Much smoother - REDUCED from 0.3
         
         print(f"PiCommunicator initialized: {self.pi_url}")
     
@@ -23,8 +23,6 @@ class PiCommunicator:
         current_time = time.time()
         if current_time - self.last_send_time < self.send_interval:
             return True
-        
-        self.last_send_time = current_time
         
         try:
             # Smooth the values (exponential moving average)
@@ -40,13 +38,14 @@ class PiCommunicator:
             }
             
             # DEBUG: Print what we're sending
-            print(f"[LAPTOP] Sending to Pi: yaw={payload['yaw']:.2f}°, pitch={payload['pitch']:.2f}°", end="\r")
+            print(f"[LAPTOP] Sending to Pi: yaw={payload['yaw']:.2f}°, pitch={payload['pitch']:.2f}°")
             
             response = requests.post(self.pi_url, json=payload, timeout=0.5)
             
             if response.status_code == 200:
+                self.last_send_time = current_time
                 result = response.json()
-                print(f"\n[LAPTOP] Pi responded: servo_angle={result.get('servo_angle')}°")
+                print(f"[LAPTOP] Pi responded: servo_angle={result.get('servo_angle')}°")
             
             return response.status_code == 200
         except requests.exceptions.Timeout:

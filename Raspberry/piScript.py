@@ -48,6 +48,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # --- GLOBAL VARIABLES ---
 servo_angle = 90
 last_commanded_angle = 90  # Track last angle sent to servo
+last_orientation_time = 0  # Track when we last received orientation data
 running = True
 current_frame = None
 frame_lock = threading.Lock()
@@ -55,7 +56,8 @@ last_llm_summary = "Waiting for initial scene analysis..."
 llm_summary_lock = threading.Lock()
 
 # Servo deadband - ignore changes smaller than this
-SERVO_DEADBAND = 2  # degrees
+SERVO_DEADBAND = 5  # degrees - Increased to reduce jitter
+ORIENTATION_TIMEOUT = 2.0  # seconds - if no data received for this long, stop moving servo
 
 # --- SERVO CONTROL FUNCTIONS ---
 def set_servo_angle(angle):
@@ -214,6 +216,27 @@ def llm_thread_func():
         
         time.sleep(1)
 
+# --- SERVO WATCHDOG THREAD ---
+def servo_watchdog_func():
+    """Monitor laptop connection and return servo to center if disconnected"""
+    global last_commanded_angle, running
+    
+    print("[Pi] Servo watchdog thread started")
+    time.sleep(5)
+    
+    while running:
+        # Check if laptop has stopped sending data
+        time_since_last_data = time.time() - last_orientation_time
+        
+        if time_since_last_data > ORIENTATION_TIMEOUT:
+            # Laptop disconnected - return to center if not already there
+            if last_commanded_angle != 90:
+                print(f"\n[Pi] Laptop disconnected ({time_since_last_data:.1f}s), returning servo to center")
+                last_commanded_angle = 90
+                set_servo_angle(90)
+        
+        time.sleep(1)
+
 # --- FLASK ROUTES ---
 def generate_frames():
     """Generate video frames for streaming"""
@@ -243,7 +266,10 @@ def video_feed():
 @app.route('/orientation', methods=['POST'])
 def receive_orientation():
     """Receive orientation from laptop and move servo"""
-    global servo_angle, last_commanded_angle
+    global servo_angle, last_commanded_angle, last_orientation_time
+    
+    # Update last received time
+    last_orientation_time = time.time()
     
     data = request.json
     yaw = data.get('yaw', 0)
@@ -272,7 +298,8 @@ def receive_orientation():
         'servo_angle': last_commanded_angle, 
         'received_yaw': yaw, 
         'received_pitch': pitch,
-        'angle_change': angle_change
+        'angle_change': angle_change,
+        'laptop_connected': True
     })
 
 @app.route('/llm_summary')
@@ -308,10 +335,14 @@ def trigger_analysis():
 @app.route('/status')
 def status():
     """Get system status"""
+    # Check if we've received orientation data recently
+    laptop_connected = (time.time() - last_orientation_time) < ORIENTATION_TIMEOUT
+    
     return jsonify({
         'servo_angle': servo_angle,
         'camera_active': current_frame is not None,
-        'llm_active': OPENROUTER_API_KEY is not None
+        'llm_active': OPENROUTER_API_KEY is not None,
+        'laptop_connected': laptop_connected
     })
 
 # --- MAIN ---
@@ -321,6 +352,7 @@ if __name__ == "__main__":
     
     # Start threads
     threading.Thread(target=camera_thread_func, daemon=True).start()
+    threading.Thread(target=servo_watchdog_func, daemon=True).start()
     
     if OPENROUTER_API_KEY:
         threading.Thread(target=llm_thread_func, daemon=True).start()
