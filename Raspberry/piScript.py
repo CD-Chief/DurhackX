@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request
 from flask_socketio import SocketIO
 from flask_cors import CORS
-from gpiozero import Servo
-from gpiozero.pins.pigpio import PiGPIOFactory
+from gpiozero import AngularServo
 
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
@@ -28,9 +27,18 @@ PI_PORT = int(os.getenv('PI_PORT', 5000))
 LLM_INTERVAL_SECONDS = int(os.getenv('LLM_INTERVAL_SECONDS', 15))
 
 # --- SERVO SETUP ---
-factory = PiGPIOFactory()
-servo = Servo(2, pin_factory=factory)  # GPIO pin 2
-servo.mid()  # Start at neutral position (90 degrees)
+SERVO_PIN = 2  # BCM pin 2 (physical pin 3)
+
+# Create servo object (no factory needed)
+servo = AngularServo(
+    SERVO_PIN,
+    min_angle=0,
+    max_angle=180,
+    min_pulse_width=0.5/1000,
+    max_pulse_width=2.5/1000
+)
+
+servo.angle = 90  # Start at neutral
 
 # --- FLASK SETUP ---
 app = Flask(__name__)
@@ -47,11 +55,14 @@ llm_summary_lock = threading.Lock()
 
 # --- SERVO CONTROL FUNCTIONS ---
 def set_servo_angle(angle):
-    """Convert angle (0-180) to servo value (-1 to 1)"""
-    # 0° = -1, 90° = 0, 180° = 1
-    servo_value = (angle - 90) / 90
-    servo.value = max(-1, min(1, servo_value))
-    print(f"[Pi] Servo Angle: {angle:.1f}°   ", end="\r")
+    """Set servo to specific angle (0-180)"""
+    try:
+        # Clamp angle to valid range
+        angle = max(0, min(180, angle))
+        servo.angle = angle
+        print(f"[Pi] Servo Angle: {angle:.1f}°   ", end="\r")
+    except Exception as e:
+        print(f"\n[Pi] Servo error: {e}")
 
 # --- LLM FUNCTIONS ---
 def cv2_to_base64_image_url(cv2_img):
