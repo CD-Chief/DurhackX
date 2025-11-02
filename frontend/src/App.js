@@ -5,9 +5,7 @@ function App() {
   const [orientation, setOrientation] = useState({
     yaw: 0,
     pitch: 0,
-    face_detected: false,
-    tracker_type: 'face',
-    calibrated: false
+    face_detected: false
   });
 
   const [piConnected, setPiConnected] = useState(false);
@@ -41,26 +39,6 @@ function App() {
     return () => clearInterval(checkPi);
   }, []);
 
-  const switchTracker = async (type) => {
-    try {
-      await fetch('http://localhost:5002/switch_tracker', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type })
-      });
-    } catch (error) {
-      console.error('Failed to switch tracker:', error);
-    }
-  };
-
-  const startCalibration = async () => {
-    try {
-      await fetch('http://localhost:5002/calibrate', { method: 'POST' });
-    } catch (error) {
-      console.error('Failed to start calibration:', error);
-    }
-  };
-
   return (
     <div className="App">
       <header className="header">
@@ -70,38 +48,6 @@ function App() {
           <span className="durhack-badge">DurHackX</span>
         </div>
       </header>
-
-      {/* Tracking controls - moved below header */}
-      <div className="controls-bar">
-        <div className="tracker-switch">
-          <button 
-            className={`btn ${orientation.tracker_type === 'face' ? 'active' : ''}`}
-            onClick={() => switchTracker('face')}
-          >
-            👤 Face
-          </button>
-          <button 
-            className={`btn ${orientation.tracker_type === 'eye' ? 'active' : ''}`}
-            onClick={() => switchTracker('eye')}
-          >
-            👁️ Eye
-          </button>
-        </div>
-
-        {orientation.tracker_type === 'eye' && (
-          <button className="btn btn-calibrate" onClick={startCalibration}>
-            🎯 Calibrate
-          </button>
-        )}
-
-        <div className="orientation-display">
-          <span className={`indicator ${orientation.face_detected ? 'active' : ''}`}></span>
-          <span>Yaw: {orientation.yaw.toFixed(1)}°</span>
-          {orientation.tracker_type === 'face' && (
-            <span> | Pitch: {orientation.pitch.toFixed(1)}°</span>
-          )}
-        </div>
-      </div>
       
       <main className="main-content">
         <div className="video-container">
@@ -121,6 +67,13 @@ function App() {
               </div>
             )}
             <div className="video-label">What Pi Sees</div>
+            
+            {/* Orientation overlay */}
+            <div className="orientation-overlay">
+              <span className={`indicator ${orientation.face_detected ? 'active' : ''}`}></span>
+              <span>Yaw: {orientation.yaw.toFixed(1)}°</span>
+              <span> | Pitch: {orientation.pitch.toFixed(1)}°</span>
+            </div>
           </div>
           
           {/* Small preview video in top left - Your laptop camera */}
@@ -137,9 +90,7 @@ function App() {
             <div className="preview-placeholder" style={{display: 'none'}}>
               <small>Camera Starting...</small>
             </div>
-            <div className="preview-label">
-              {orientation.tracker_type === 'face' ? 'Your Face' : 'Your Eyes'}
-            </div>
+            <div className="preview-label">Your Face</div>
           </div>
         </div>
       </main>

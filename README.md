@@ -17,14 +17,13 @@
 
 ## 📖 Overview
 
-**Visio** is a sophisticated eye and face tracking application that enables real-time gaze detection and orientation tracking. The system uses MediaPipe for advanced computer vision capabilities and provides a seamless web interface for monitoring and control.
+**Visio** is a sophisticated face tracking application that enables real-time head pose detection and orientation tracking. The system uses MediaPipe for advanced computer vision capabilities and provides a seamless web interface for monitoring and control.
 
 ### 🎯 Key Capabilities
 
-- **Dual Tracking Modes**: Switch between face orientation tracking and precise eye gaze tracking
+- **Face Orientation Tracking**: Real-time head pose estimation (yaw, pitch, roll)
 - **Real-time Processing**: Sub-100ms latency for responsive tracking
-- **Eye Calibration**: Advanced calibration system for accurate gaze estimation
-- **Web Dashboard**: Modern React-based interface for live monitoring and control
+- **Web Dashboard**: Modern React-based interface for live monitoring
 - **Distributed Architecture**: Laptop-based tracking with Raspberry Pi integration (in development)
 
 ---
@@ -37,16 +36,9 @@
 - Smooth orientation calculation
 - Visual feedback overlay
 
-### 👁️ Eye Tracking
-- Precise iris landmark detection
-- Calibration system for personalized accuracy
-- Gaze direction estimation
-- Eye aspect ratio monitoring
-
-### 🖥️ Web Interface
+### ️ Web Interface
 - Live video feed display
 - Dual camera support (laptop + Raspberry Pi)
-- Tracker mode switching (Face/Eye)
 - Real-time orientation data display
 - Connection status monitoring
 - Responsive design for all devices
@@ -105,16 +97,9 @@ The frontend will be available at `http://localhost:3000`
 
 #### 1. Start the Laptop Tracker (Backend)
 
-**Face Tracking Mode:**
 ```bash
 cd laptop
-py -3.12 main.py --tracker face
-```
-
-**Eye Tracking Mode:**
-```bash
-cd laptop
-py -3.12 main.py --tracker eye
+py -3.12 main.py
 ```
 
 The tracker server will start on `http://localhost:5002`
@@ -130,12 +115,10 @@ Access the dashboard at `http://localhost:3000`
 
 ### Using the Dashboard
 
-1. **Select Tracking Mode**: Use the Face 👤 or Eye 👁️ buttons to switch between tracking modes
-2. **Calibration** (Eye mode only): Click the 🎯 Calibrate button to start eye calibration
-3. **Monitor Status**: Watch the connection indicator and real-time orientation data
-4. **Video Feeds**: 
+1. **Monitor Status**: Watch the connection indicator and real-time orientation data (Yaw and Pitch)
+2. **Video Feeds**: 
    - **Main view**: Shows what the Raspberry Pi camera sees (when connected)
-   - **Preview**: Shows your laptop camera feed with tracking overlay
+   - **Preview**: Shows your laptop camera feed with face tracking overlay
 
 ---
 
@@ -148,7 +131,6 @@ DurhackX/
 ├── laptop/                 # Backend tracking system
 │   ├── main.py            # Main server and tracking coordinator
 │   ├── face_tracker.py    # Face orientation tracking
-│   ├── eye_tracker.py     # Eye gaze tracking with calibration
 │   ├── communication.py   # Raspberry Pi communication
 │   ├── models/            # MediaPipe model files
 │   └── requirements.txt   # Python dependencies
@@ -192,10 +174,8 @@ DurhackX/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/orientation` | GET | Get current tracking data (yaw, pitch, face_detected, tracker_type, calibrated) |
+| `/orientation` | GET | Get current tracking data (yaw, pitch, face_detected) |
 | `/laptop_feed` | GET | Live video feed from laptop camera with tracking overlay |
-| `/switch_tracker` | POST | Switch between face and eye tracking modes |
-| `/calibrate` | POST | Start eye tracking calibration sequence |
 
 ### Raspberry Pi Server (`192.168.1.100:5000`) - In Development
 
@@ -260,9 +240,7 @@ py -3.12 -m pip install mediapipe
 
 ### ✅ Completed
 - Face orientation tracking system
-- Eye gaze tracking with calibration
 - Web dashboard with live video feeds
-- Mode switching functionality
 - Real-time data visualization
 
 ### 🔨 In Development
