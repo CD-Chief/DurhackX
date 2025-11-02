@@ -10,6 +10,21 @@ function App() {
           <span className="durhack-badge">DurHackX</span>
         </div>
       </header>
+      
+      <main className="main-content">
+        <div className="video-container">
+          {/* Main video feed placeholder */}
+          <div className="main-video">
+            <div className="status-message">
+              <div className="status-icon">📡</div>
+              <p>Raspberry Pi Not Connected</p>
+            </div>
+          </div>
+          
+          {/* Small preview video in top left */}
+          <div className="preview-video"></div>
+        </div>
+      </main>
     </div>
   );
 }
