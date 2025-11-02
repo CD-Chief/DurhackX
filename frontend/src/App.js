@@ -11,6 +11,7 @@ function App() {
   const [piConnected, setPiConnected] = useState(false);
   const [aiInsightsOpen, setAiInsightsOpen] = useState(true);
   const [aiMessage, setAiMessage] = useState("AI insights will appear here...");
+  const [aiInsights, setAiInsights] = useState("AI insights will appear here...");
 
   // Poll orientation data from laptop tracker
   useEffect(() => {
@@ -39,6 +40,22 @@ function App() {
     }, 2000);
 
     return () => clearInterval(checkPi);
+  }, []);
+
+  // Fetch LLM summary from Pi
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('http://192.168.1.100:5000/llm_summary');
+        const data = await response.json();
+        setAiInsights(data.summary || "Waiting for AI analysis...");
+        setAiMessage(data.summary || "Waiting for AI analysis...");
+      } catch (error) {
+        console.error('Failed to fetch AI insights:', error);
+      }
+    }, 3000); // Update every 3 seconds
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -113,7 +130,7 @@ function App() {
           {aiInsightsOpen && (
             <div className="ai-content">
               <div className="ai-message">
-                {aiMessage}
+                {aiInsights}
               </div>
             </div>
           )}
