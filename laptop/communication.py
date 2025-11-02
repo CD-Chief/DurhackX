@@ -15,12 +15,23 @@ class PiCommunicator:
                 'yaw': float(yaw) if yaw is not None else 0.0,
                 'pitch': float(pitch) if pitch is not None else 0.0
             }
+            
+            # DEBUG: Print what we're sending
+            print(f"[LAPTOP] Sending to Pi: yaw={payload['yaw']:.2f}°, pitch={payload['pitch']:.2f}°", end="\r")
+            
             response = requests.post(self.pi_url, json=payload, timeout=0.1)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"\n[LAPTOP] Pi responded: {result}")
+            
             return response.status_code == 200
         except requests.exceptions.Timeout:
+            print("\n[LAPTOP] Timeout connecting to Pi")
             return False
         except requests.exceptions.ConnectionError:
+            print("\n[LAPTOP] Cannot connect to Pi")
             return False
         except Exception as e:
-            print(f"Communication error: {e}")
+            print(f"\n[LAPTOP] Communication error: {e}")
             return False

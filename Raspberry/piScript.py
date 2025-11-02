@@ -245,14 +245,19 @@ def receive_orientation():
     yaw = data.get('yaw', 0)
     pitch = data.get('pitch', 0)
     
+    # DEBUG: Print what we received
+    print(f"\n[Pi] Received from laptop: yaw={yaw:.2f}°, pitch={pitch:.2f}°")
+    
     # Convert yaw to servo angle (map -45 to 45 degrees → 0 to 180)
     servo_angle = int(90 + yaw)
     servo_angle = max(0, min(180, servo_angle))
     
+    print(f"[Pi] Calculated servo_angle={servo_angle}° (from yaw={yaw:.2f}°)")
+    
     # Move servo
     set_servo_angle(servo_angle)
     
-    return jsonify({'status': 'ok', 'servo_angle': servo_angle})
+    return jsonify({'status': 'ok', 'servo_angle': servo_angle, 'received_yaw': yaw, 'received_pitch': pitch})
 
 @app.route('/llm_summary')
 def get_llm_summary():

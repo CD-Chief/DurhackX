@@ -30,6 +30,8 @@ def generate_frames():
     """Generate webcam frames with tracking overlay."""
     global current_state, tracker
     
+    frame_count = 0
+    
     while True:
         success, frame = cap.read()
         if not success:
@@ -45,10 +47,17 @@ def generate_frames():
             current_state['pitch'] = pitch
             current_state['face_detected'] = True
             
+            # DEBUG: Print every 30 frames (~1 second)
+            frame_count += 1
+            if frame_count % 30 == 0:
+                print(f"\n[LAPTOP] Face detected: yaw={yaw:.2f}°, pitch={pitch:.2f}°")
+            
             # Send to Pi
             communicator.send_orientation(yaw, pitch)
         else:
             current_state['face_detected'] = False
+            if frame_count % 30 == 0:
+                print("\n[LAPTOP] No face detected")
         
         # Encode frame
         ret, buffer = cv2.imencode('.jpg', annotated_frame)
