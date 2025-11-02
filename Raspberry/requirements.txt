@@ -1,7 +1,10 @@
-flask==3.0.0
-flask-socketio==5.3.0
-flask-cors==4.0.0
+flask
+flask-socketio
+flask-cors
 opencv-python
 numpy
 requests
 python-socketio
+python-dotenv
+RPi.GPIO
+picamera2

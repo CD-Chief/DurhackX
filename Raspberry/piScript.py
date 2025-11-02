@@ -1,4 +1,4 @@
-# raspberry/main.py
+# raspberry/unified_main.py
 import cv2
 import threading
 import time
@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request
 from flask_socketio import SocketIO
 from flask_cors import CORS
+import RPi.GPIO as GPIO
 
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
@@ -18,11 +19,19 @@ load_dotenv()
 # --- CONFIGURATION ---
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY not found in environment variables!")
+    print("[Pi] Warning: OPENROUTER_API_KEY not found. AI features disabled.")
+    OPENROUTER_API_KEY = None
 
 PI_HOST = os.getenv('PI_HOST', '0.0.0.0')
 PI_PORT = int(os.getenv('PI_PORT', 5000))
 LLM_INTERVAL_SECONDS = int(os.getenv('LLM_INTERVAL_SECONDS', 15))
+
+# --- SERVO SETUP ---
+SERVO_PIN = 2  # BCM pin 2 (physical pin 3)
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(SERVO_PIN, GPIO.OUT)
+pwm = GPIO.PWM(SERVO_PIN, 50)  # 50 Hz
+pwm.start(7.5)  # Neutral position (90 degrees)
 
 # --- FLASK SETUP ---
 app = Flask(__name__)
@@ -37,74 +46,15 @@ frame_lock = threading.Lock()
 last_llm_summary = "Waiting for initial scene analysis..."
 llm_summary_lock = threading.Lock()
 
-# --- SIMPLE OBJECT DETECTION (Optional - can be disabled) ---
-class SimpleObjectDetector:
-    def __init__(self):
-        self.detected_objects = []
-        self.use_detection = False  # Set to True if you download models
-        
-        # Uncomment if you have MobileNet models downloaded
-        # try:
-        #     self.net = cv2.dnn.readNetFromCaffe(
-        #         'models/MobileNetSSD_deploy.prototxt',
-        #         'models/MobileNetSSD_deploy.caffemodel'
-        #     )
-        #     self.use_detection = True
-        #     print("[Pi] Object detection enabled")
-        # except:
-        #     print("[Pi] Object detection models not found. Using LLM only.")
-        
-        self.classes = ["background", "aeroplane", "bicycle", "bird", "boat",
-                       "bottle", "bus", "car", "cat", "chair", "cow",
-                       "diningtable", "dog", "horse", "motorbike", "person",
-                       "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
-    
-    def detect(self, frame):
-        """Detect objects in frame (disabled by default)"""
-        if not self.use_detection:
-            return []
-        
-        h, w = frame.shape[:2]
-        blob = cv2.dnn.blobFromImage(
-            cv2.resize(frame, (300, 300)), 0.007843, (300, 300), 127.5
-        )
-        
-        self.net.setInput(blob)
-        detections = self.net.forward()
-        
-        results = []
-        for i in range(detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-            
-            if confidence > 0.5:
-                idx = int(detections[0, 0, i, 1])
-                class_name = self.classes[idx]
-                
-                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                (startX, startY, endX, endY) = box.astype("int")
-                
-                results.append({
-                    'class': class_name,
-                    'confidence': float(confidence),
-                    'box': [startX, startY, endX, endY]
-                })
-        
-        self.detected_objects = results
-        return results
-    
-    def draw_detections(self, frame):
-        """Draw bounding boxes on frame"""
-        for obj in self.detected_objects:
-            startX, startY, endX, endY = obj['box']
-            label = f"{obj['class']}: {obj['confidence']:.2f}"
-            
-            cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
-            cv2.putText(frame, label, (startX, startY - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
-        return frame
-
-detector = SimpleObjectDetector()
+# --- SERVO CONTROL FUNCTIONS ---
+def set_servo_angle(angle):
+    """Convert angle (0-180) to PWM duty cycle and move servo"""
+    # Duty cycle: 2.5% = 0°, 7.5% = 90°, 12.5% = 180°
+    duty = (angle / 18) + 2.5
+    duty = max(2.5, min(12.5, duty))
+    pwm.ChangeDutyCycle(duty)
+    time.sleep(0.01)
+    pwm.ChangeDutyCycle(0)  # Stop sending signal to reduce jitter
 
 # --- LLM FUNCTIONS ---
 def cv2_to_base64_image_url(cv2_img):
@@ -116,29 +66,27 @@ def cv2_to_base64_image_url(cv2_img):
     base64_string = base64.b64encode(buffer).decode('utf-8')
     return f"data:image/jpeg;base64,{base64_string}"
 
-def get_gemini_description(image_cv2, user_request_prompt=None):
-    """Sends the image and a prompt to the Gemini 2.0 Flash model via OpenRouter."""
+def get_gemini_description(image_cv2):
+    """Sends the image to Gemini via OpenRouter."""
+    if not OPENROUTER_API_KEY:
+        return "AI features disabled (no API key)"
+    
     try:
         image_data_url = cv2_to_base64_image_url(image_cv2)
         
-        system_instruction_prompt = """
+        system_instruction = """
         You are an AI assistant providing objective, factual descriptions of visual scenes.
-        Your output must ONLY be based on what is directly observable in the provided image.
-        Be concise, accurate, and focus strictly on visible objects, people, actions, and the overall scene.
-        Provide 1-2 sentence descriptions connecting observations naturally.
+        Be concise and accurate. Provide 1-2 sentence descriptions.
         """
         
-        if user_request_prompt:
-            actual_user_prompt = f"Based ONLY on the image, answer this question concisely: '{user_request_prompt}'."
-        else:
-            actual_user_prompt = "Provide a factual description of everything visible in this image in 1-2 sentences, connecting the observations naturally."
+        user_prompt = "Describe everything visible in this image in 1-2 sentences."
         
         messages_payload = [
-            {"role": "system", "content": system_instruction_prompt},
+            {"role": "system", "content": system_instruction},
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": actual_user_prompt},
+                    {"type": "text", "text": user_prompt},
                     {"type": "image_url", "image_url": {"url": image_data_url}}
                 ]
             }
@@ -163,54 +111,65 @@ def get_gemini_description(image_cv2, user_request_prompt=None):
         
         response.raise_for_status()
         response_json = response.json()
-        llm_text_output = response_json['choices'][0]['message']['content'].strip()
-        
-        return llm_text_output
+        return response_json['choices'][0]['message']['content'].strip()
     
-    except requests.exceptions.Timeout:
-        return "AI analysis timed out. Please try again."
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 401:
-            return "Error: Invalid API key."
-        elif e.response.status_code == 429:
-            return "Error: API rate limit exceeded. Please wait."
-        else:
-            return f"Error: API returned status {e.response.status_code}"
     except Exception as e:
-        return f"Error analyzing image: {str(e)}"
+        return f"AI analysis error: {str(e)[:50]}"
 
 # --- CAMERA THREAD ---
 def camera_thread_func():
     global current_frame, running
     
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("[Pi] Error: Could not open camera")
-        running = False
-        return
-    
-    print("[Pi] Camera started")
-    
-    while running:
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.1)
-            continue
+    try:
+        # Try Picamera2 first (Raspberry Pi camera module)
+        from picamera2 import Picamera2
+        picam = Picamera2()
+        picam.configure(picam.create_preview_configuration(main={"size": (640, 480)}))
+        picam.start()
+        time.sleep(2)
+        print("[Pi] Using Picamera2")
         
-        # Optionally detect objects (if models are available)
-        detector.detect(frame)
-        frame = detector.draw_detections(frame)
+        while running:
+            frame = picam.capture_array()
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            
+            # Add servo angle overlay
+            cv2.putText(frame, f"Servo: {servo_angle}", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            with frame_lock:
+                current_frame = frame.copy()
+            
+            time.sleep(0.03)  # ~30 FPS
         
-        # Add servo angle overlay
-        cv2.putText(frame, f"Servo: {servo_angle}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        picam.stop()
         
-        with frame_lock:
-            current_frame = frame.copy()
+    except ImportError:
+        # Fallback to USB webcam
+        print("[Pi] Picamera2 not available, using USB webcam")
+        cap = cv2.VideoCapture(0)
         
-        time.sleep(0.03)  # ~30 FPS
-    
-    cap.release()
+        if not cap.isOpened():
+            print("[Pi] Error: Could not open camera")
+            running = False
+            return
+        
+        while running:
+            ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.1)
+                continue
+            
+            # Add servo angle overlay
+            cv2.putText(frame, f"Servo: {servo_angle}", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            with frame_lock:
+                current_frame = frame.copy()
+            
+            time.sleep(0.03)
+        
+        cap.release()
 
 # --- LLM ANALYSIS THREAD ---
 last_llm_trigger_time = time.time()
@@ -219,7 +178,7 @@ def llm_thread_func():
     global last_llm_summary, last_llm_trigger_time, running
     
     print("[Pi] LLM analysis thread started")
-    time.sleep(5)  # Wait for camera to initialize
+    time.sleep(5)
     
     while running:
         if time.time() - last_llm_trigger_time >= LLM_INTERVAL_SECONDS:
@@ -237,8 +196,6 @@ def llm_thread_func():
                     last_llm_summary = llm_response
                 
                 print(f"[Pi] LLM: {llm_response}")
-                
-                # Emit to frontend via WebSocket
                 socketio.emit('llm_update', {'summary': llm_response})
                 
                 last_llm_trigger_time = time.time()
@@ -273,7 +230,7 @@ def video_feed():
 
 @app.route('/orientation', methods=['POST'])
 def receive_orientation():
-    """Receive orientation from laptop"""
+    """Receive orientation from laptop and move servo"""
     global servo_angle
     
     data = request.json
@@ -284,8 +241,8 @@ def receive_orientation():
     servo_angle = int(90 + yaw)
     servo_angle = max(0, min(180, servo_angle))
     
-    # TODO: Send to actual servo hardware here
-    # Example: GPIO.output(SERVO_PIN, servo_angle)
+    # Move servo
+    set_servo_angle(servo_angle)
     
     return jsonify({'status': 'ok', 'servo_angle': servo_angle})
 
@@ -307,18 +264,12 @@ def trigger_analysis():
             frame_to_analyze = current_frame.copy()
     
     if frame_to_analyze is not None:
-        data = request.json or {}
-        user_prompt = data.get('prompt', None)
-        
-        llm_response = get_gemini_description(frame_to_analyze, user_prompt)
+        llm_response = get_gemini_description(frame_to_analyze)
         
         with llm_summary_lock:
             last_llm_summary = llm_response
         
-        # Emit via WebSocket
         socketio.emit('llm_update', {'summary': llm_response})
-        
-        # Reset timer
         last_llm_trigger_time = time.time()
         
         return jsonify({'summary': llm_response})
@@ -331,21 +282,24 @@ def status():
     return jsonify({
         'servo_angle': servo_angle,
         'camera_active': current_frame is not None,
-        'llm_active': True
+        'llm_active': OPENROUTER_API_KEY is not None
     })
 
 # --- MAIN ---
 if __name__ == "__main__":
-    print("[Pi] Starting Raspberry Pi Camera System...")
-    print("[Pi] API Key configured:", "✓" if OPENROUTER_API_KEY else "✗")
+    print("[Pi] Starting 3rd Eye Raspberry Pi System...")
+    print("[Pi] API Key configured:", "✓" if OPENROUTER_API_KEY else "✗ (AI disabled)")
     
     # Start threads
     threading.Thread(target=camera_thread_func, daemon=True).start()
-    threading.Thread(target=llm_thread_func, daemon=True).start()
     
-    print(f"[Pi] Pi camera system running on http://{PI_HOST}:{PI_PORT}")
+    if OPENROUTER_API_KEY:
+        threading.Thread(target=llm_thread_func, daemon=True).start()
+    
+    print(f"[Pi] System running on http://{PI_HOST}:{PI_PORT}")
     print("[Pi] Ready to receive orientation from laptop")
-    print(f"[Pi] LLM analysis will run every {LLM_INTERVAL_SECONDS} seconds")
+    if OPENROUTER_API_KEY:
+        print(f"[Pi] LLM analysis will run every {LLM_INTERVAL_SECONDS} seconds")
     
     try:
         socketio.run(app, host=PI_HOST, port=PI_PORT, debug=False)
@@ -353,4 +307,6 @@ if __name__ == "__main__":
         print("[Pi] Shutting down...")
         running = False
     finally:
-        print("[Pi] Exited")
+        pwm.stop()
+        GPIO.cleanup()
+        print("[Pi] Exited cleanly")
