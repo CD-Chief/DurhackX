@@ -47,11 +47,15 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # --- GLOBAL VARIABLES ---
 servo_angle = 90
+last_commanded_angle = 90  # Track last angle sent to servo
 running = True
 current_frame = None
 frame_lock = threading.Lock()
 last_llm_summary = "Waiting for initial scene analysis..."
 llm_summary_lock = threading.Lock()
+
+# Servo deadband - ignore changes smaller than this
+SERVO_DEADBAND = 2  # degrees
 
 # --- SERVO CONTROL FUNCTIONS ---
 def set_servo_angle(angle):
@@ -239,7 +243,7 @@ def video_feed():
 @app.route('/orientation', methods=['POST'])
 def receive_orientation():
     """Receive orientation from laptop and move servo"""
-    global servo_angle
+    global servo_angle, last_commanded_angle
     
     data = request.json
     yaw = data.get('yaw', 0)
@@ -249,15 +253,27 @@ def receive_orientation():
     print(f"\n[Pi] Received from laptop: yaw={yaw:.2f}°, pitch={pitch:.2f}°")
     
     # Convert yaw to servo angle (map -45 to 45 degrees → 0 to 180)
-    servo_angle = int(90 + yaw)
-    servo_angle = max(0, min(180, servo_angle))
+    new_angle = int(90 + yaw)
+    new_angle = max(0, min(180, new_angle))
     
-    print(f"[Pi] Calculated servo_angle={servo_angle}° (from yaw={yaw:.2f}°)")
+    # Only move servo if change is significant (deadband)
+    angle_change = abs(new_angle - last_commanded_angle)
     
-    # Move servo
-    set_servo_angle(servo_angle)
+    if angle_change >= SERVO_DEADBAND:
+        print(f"[Pi] Moving servo: {last_commanded_angle}° → {new_angle}° (change: {angle_change}°)")
+        servo_angle = new_angle
+        last_commanded_angle = new_angle
+        set_servo_angle(servo_angle)
+    else:
+        print(f"[Pi] Ignoring small change: {angle_change}° (deadband: {SERVO_DEADBAND}°)")
     
-    return jsonify({'status': 'ok', 'servo_angle': servo_angle, 'received_yaw': yaw, 'received_pitch': pitch})
+    return jsonify({
+        'status': 'ok', 
+        'servo_angle': last_commanded_angle, 
+        'received_yaw': yaw, 
+        'received_pitch': pitch,
+        'angle_change': angle_change
+    })
 
 @app.route('/llm_summary')
 def get_llm_summary():
