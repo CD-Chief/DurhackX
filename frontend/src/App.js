@@ -9,6 +9,8 @@ function App() {
   });
 
   const [piConnected, setPiConnected] = useState(false);
+  const [aiInsightsOpen, setAiInsightsOpen] = useState(true);
+  const [aiMessage, setAiMessage] = useState("AI insights will appear here...");
 
   // Poll orientation data from laptop tracker
   useEffect(() => {
@@ -92,6 +94,29 @@ function App() {
             </div>
             <div className="preview-label">Your Face</div>
           </div>
+        </div>
+
+        {/* AI Insights Box */}
+        <div className={`ai-insights ${aiInsightsOpen ? 'open' : 'closed'}`}>
+          <div className="ai-header" onClick={() => setAiInsightsOpen(!aiInsightsOpen)}>
+            <span className="insight-indicator active"></span>
+            <h3>Gemini Insights</h3>
+            <button 
+              className="ai-toggle"
+              aria-label={aiInsightsOpen ? 'Close Gemini Insights' : 'Open Gemini Insights'}
+            >
+              <span className={`chevron ${aiInsightsOpen ? 'up' : 'down'}`}>
+                {aiInsightsOpen ? '▼' : '▲'}
+              </span>
+            </button>
+          </div>
+          {aiInsightsOpen && (
+            <div className="ai-content">
+              <div className="ai-message">
+                {aiMessage}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
