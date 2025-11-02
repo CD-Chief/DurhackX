@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, request
 from flask_socketio import SocketIO
 from flask_cors import CORS
-import RPi.GPIO as GPIO
+from gpiozero import Servo
+from gpiozero.pins.pigpio import PiGPIOFactory
 
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
@@ -27,11 +28,9 @@ PI_PORT = int(os.getenv('PI_PORT', 5000))
 LLM_INTERVAL_SECONDS = int(os.getenv('LLM_INTERVAL_SECONDS', 15))
 
 # --- SERVO SETUP ---
-SERVO_PIN = 2  # BCM pin 2 (physical pin 3)
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(SERVO_PIN, GPIO.OUT)
-pwm = GPIO.PWM(SERVO_PIN, 50)  # 50 Hz
-pwm.start(7.5)  # Neutral position (90 degrees)
+factory = PiGPIOFactory()
+servo = Servo(2, pin_factory=factory)  # GPIO pin 2
+servo.mid()  # Start at neutral position (90 degrees)
 
 # --- FLASK SETUP ---
 app = Flask(__name__)
@@ -48,13 +47,11 @@ llm_summary_lock = threading.Lock()
 
 # --- SERVO CONTROL FUNCTIONS ---
 def set_servo_angle(angle):
-    """Convert angle (0-180) to PWM duty cycle and move servo"""
-    # Duty cycle: 2.5% = 0°, 7.5% = 90°, 12.5% = 180°
-    duty = (angle / 18) + 2.5
-    duty = max(2.5, min(12.5, duty))
-    pwm.ChangeDutyCycle(duty)
-    time.sleep(0.01)
-    pwm.ChangeDutyCycle(0)  # Stop sending signal to reduce jitter
+    """Convert angle (0-180) to servo value (-1 to 1)"""
+    # 0° = -1, 90° = 0, 180° = 1
+    servo_value = (angle - 90) / 90
+    servo.value = max(-1, min(1, servo_value))
+    print(f"[Pi] Servo Angle: {angle:.1f}°   ", end="\r")
 
 # --- LLM FUNCTIONS ---
 def cv2_to_base64_image_url(cv2_img):
@@ -307,6 +304,5 @@ if __name__ == "__main__":
         print("[Pi] Shutting down...")
         running = False
     finally:
-        pwm.stop()
-        GPIO.cleanup()
+        servo.close()
         print("[Pi] Exited cleanly")

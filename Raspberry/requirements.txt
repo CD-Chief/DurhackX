@@ -6,5 +6,6 @@ numpy
 requests
 python-socketio
 python-dotenv
-RPi.GPIO
+gpiozero
+pigpio
 picamera2
