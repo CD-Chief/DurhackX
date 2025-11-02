@@ -56,7 +56,7 @@ last_llm_summary = "Waiting for initial scene analysis..."
 llm_summary_lock = threading.Lock()
 
 # Servo deadband - ignore changes smaller than this
-SERVO_DEADBAND = 5  # degrees - Increased to reduce jitter
+SERVO_DEADBAND = 10  # degrees - INCREASED to reduce jitter even more
 ORIENTATION_TIMEOUT = 2.0  # seconds - if no data received for this long, stop moving servo
 
 # --- SERVO CONTROL FUNCTIONS ---

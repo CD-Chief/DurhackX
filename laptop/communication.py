@@ -10,10 +10,10 @@ class PiCommunicator:
         
         # Throttling and smoothing
         self.last_send_time = 0
-        self.send_interval = 0.2  # Send every 200ms (5 Hz max) - REDUCED for smoother movement
+        self.send_interval = 0.5  # Send every 500ms (2 Hz) - MUCH SLOWER
         self.last_yaw = 0
         self.last_pitch = 0
-        self.smoothing_factor = 0.15  # Much smoother - REDUCED from 0.3
+        self.smoothing_factor = 0.05  # Very smooth - MUCH LOWER
         
         print(f"PiCommunicator initialized: {self.pi_url}")
     
